@@ -39,3 +39,7 @@ models/*.xml
 .shiftlog/
 .vscode/
 .idea/
+
+checkpoints-sampling/
+checkpoints-old-*/
+chant-omr-data.tar.xz

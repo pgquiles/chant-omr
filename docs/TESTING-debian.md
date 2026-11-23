@@ -7,8 +7,7 @@ not a benchmark — the UHD iGPU has far fewer EUs than Arc.
 
 ## 1. GPU driver stack
 
-OpenVINO's GPU plugin needs NEO (OpenCL) + Level Zero. Try Debian's
-packages first:
+OpenVINO's GPU plugin needs NEO (OpenCL) + Level Zero:
 
 ```bash
 sudo apt update && sudo apt install -y \
