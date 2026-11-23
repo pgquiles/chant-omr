@@ -30,6 +30,22 @@ from chant_omr.inference.preprocess import prepare_inference_numpy
 from chant_omr.model.tokenizer import GABCTokenizer
 
 
+def resolve_ov_device(device: str, available_devices: list[str]) -> str:
+    """Resolve an OpenVINO device request to an explicit plugin.
+
+    Compiling all four IRs through one shared ``AUTO`` context breaks port
+    lookup for the KV-cached decoder on some OpenVINO builds
+    (``Cannot find tensor for port .../sink_port_0``), while explicit
+    ``CPU``/``GPU`` compiles of the same IRs work. So a bare ``AUTO``
+    request resolves to ``"GPU"`` when present, else ``"CPU"``.
+    Anything else (explicit plugins, compound specs like ``"AUTO:GPU,CPU"``)
+    passes through unchanged.
+    """
+    if device.upper() == "AUTO":
+        return "GPU" if "GPU" in available_devices else "CPU"
+    return device
+
+
 @dataclass
 class OvModelBundle:
     """Pre-loaded OpenVINO models, manifest, and tokenizer."""
@@ -49,6 +65,9 @@ def load_openvino_models(
 ) -> OvModelBundle:
     """Load compiled OpenVINO IRs, manifest, and tokenizer from *model_dir*.
 
+    A bare ``device="AUTO"`` request resolves to an explicit plugin
+    (see :func:`resolve_ov_device`); anything else passes through.
+
     Returns an :class:`OvModelBundle` with ``encoder``, ``decoder``,
     ``decoder_init``, ``decoder_step``, ``manifest``, and ``tokenizer``.
 
@@ -65,6 +84,7 @@ def load_openvino_models(
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 
     core = ov.Core()
+    device = resolve_ov_device(device, list(core.available_devices))
 
     encoder_xml = model_dir / "encoder.xml"
     decoder_xml = model_dir / "decoder.xml"

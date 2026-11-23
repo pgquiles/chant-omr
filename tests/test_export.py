@@ -482,6 +482,30 @@ def _export_all_ov(ckpt_path, cfg_path, out_dir):
     export_decoder_step_openvino(ckpt_path, out_dir, config_path=cfg_path)
 
 
+class TestResolveOvDevice:
+    """Unit tests for AUTO→explicit device resolution (chant-omr#61)."""
+
+    def test_auto_prefers_gpu_when_available(self):
+        from chant_omr.inference.ov_decode import resolve_ov_device
+        assert resolve_ov_device("AUTO", ["CPU", "GPU"]) == "GPU"
+
+    def test_auto_falls_back_to_cpu(self):
+        from chant_omr.inference.ov_decode import resolve_ov_device
+        assert resolve_ov_device("AUTO", ["CPU"]) == "CPU"
+
+    def test_auto_is_case_insensitive(self):
+        from chant_omr.inference.ov_decode import resolve_ov_device
+        assert resolve_ov_device("auto", ["CPU", "GPU"]) == "GPU"
+
+    def test_explicit_device_passes_through(self):
+        from chant_omr.inference.ov_decode import resolve_ov_device
+        assert resolve_ov_device("CPU", ["CPU", "GPU"]) == "CPU"
+        assert resolve_ov_device("GPU", ["CPU", "GPU"]) == "GPU"
+        # Compound specs (e.g. "AUTO:GPU,CPU") are an explicit choice:
+        # pass through untouched.
+        assert resolve_ov_device("AUTO:GPU,CPU", ["CPU", "GPU"]) == "AUTO:GPU,CPU"
+
+
 class TestOVDecodeIntegration:
     """End-to-end: all 4 OpenVINO IRs → token IDs (no PyTorch model)."""
 
@@ -574,6 +598,40 @@ class TestOVDecodeIntegration:
         )
         decoded = bundle.tokenizer.decode(token_ids, skip_special_tokens=True)
         assert isinstance(decoded, str)
+
+    def test_ov_auto_resolves_to_working_device(self, config_and_ckpt, tokenizer, tmp_path):
+        """AUTO must not hit the multi-model shared-context failure (#61).
+
+        Loads all 4 IRs via device="AUTO" and runs greedy decode. Pre-fix
+        this fails in the AUTO plugin with 'Cannot find tensor for port'
+        whenever the shared AUTO context misresolves the cached decoder.
+        """
+        cfg_path, ckpt_path = config_and_ckpt
+        out_dir = tmp_path / "ov_auto"
+        _export_all_ov(ckpt_path, cfg_path, out_dir)
+
+        import numpy as np
+
+        from chant_omr.inference.ov_decode import (
+            load_openvino_models,
+            ov_encoder_infer,
+            ov_logits_func_cached,
+        )
+
+        bundle = load_openvino_models(out_dir, device="AUTO")
+        dummy_pixels = np.random.randn(1, 3, 128, 1050).astype(np.float32)
+        memory = ov_encoder_infer(bundle.encoder, dummy_pixels)
+        memory_t = torch.from_numpy(memory)
+        mask_np = np.ones((1, memory.shape[1]), dtype=np.float32)
+
+        logits_fn = ov_logits_func_cached(bundle.decoder_init, bundle.decoder_step, mask_np)
+        token_ids = greedy_decode_generic(
+            logits_fn, memory_t,
+            bos_token_id=bundle.tokenizer.bos_id, eos_token_id=bundle.tokenizer.eos_id,
+            max_length=8,
+        )
+        assert token_ids[0] == bundle.tokenizer.bos_id
+        assert len(token_ids) >= 2
 
 
 # ---------------------------------------------------------------------------

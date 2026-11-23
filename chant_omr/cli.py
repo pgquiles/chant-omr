@@ -78,6 +78,13 @@ def train(config, resume, gpus, accelerator, xpu_index, epochs, batch_size, prec
     help="Exported model directory (--device onnx/openvino; overrides --model subfolder)",
 )
 @click.option("--beam-width", type=int, default=None, help="Override config inference.beam_width")
+@click.option(
+    "--ov-device",
+    type=click.Choice(["AUTO", "CPU", "GPU"]),
+    default="AUTO",
+    show_default=True,
+    help="OpenVINO plugin (--device openvino only; AUTO resolves to GPU when present, else CPU)",
+)
 @click.option("--max-length", type=int, default=None, help="Override config inference.max_length")
 @click.option(
     "--repetition-penalty",
@@ -113,6 +120,7 @@ def predict(
     xpu_index,
     model_dir,
     beam_width,
+    ov_device,
     max_length,
     repetition_penalty,
     name,
@@ -191,6 +199,7 @@ def predict(
         gabc = ov_predict_gabc(
             Path(image_path),
             effective_model_dir,
+            ov_device=ov_device,
             beam_width=bw,
             max_length=ml,
             repetition_penalty=rp,
