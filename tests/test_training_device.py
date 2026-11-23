@@ -66,3 +66,46 @@ def test_resolve_trainer_devices_xpu_strategy(monkeypatch: pytest.MonkeyPatch):
     assert devices == 1
     assert isinstance(strategy, SingleXPUStrategy)
     assert str(strategy.root_device) == "xpu:0"
+
+
+def _real_xpu_available() -> bool:
+    """True when torch ships XPU support and a device is present."""
+    try:
+        import torch
+    except ImportError:
+        return False
+    xpu = getattr(torch, "xpu", None)
+    if xpu is None:
+        return False
+    try:
+        return bool(xpu.is_available())
+    except Exception:
+        return False
+
+
+requires_real_xpu = pytest.mark.skipif(
+    not _real_xpu_available(), reason="No Intel XPU device",
+)
+
+
+@requires_real_xpu
+def test_tiny_model_encode_on_real_xpu():
+    """Smoke: the model runs on real Intel XPU hardware (not mocked).
+
+    Guards against environment breakage (e.g. SYCL/Level-Zero loader
+    mismatches that make ``import torch`` or XPU dispatch fail) that the
+    mocked device-selection tests above cannot see.
+    """
+    import torch
+
+    from chant_omr.model.chant_omr_model import ChantOMRConfig, build_model
+
+    cfg = ChantOMRConfig(encoder_pretrained=False, vocab_size=256, max_seq_len=32)
+    model = build_model(cfg, encoder_pretrained=False).to("xpu")
+    model.eval()
+    dummy = torch.randn(1, 3, 64, 128).to("xpu")
+    with torch.inference_mode():
+        out = model.encode(dummy)
+    assert out.device.type == "xpu"
+    assert out.shape[0] == 1
+    assert out.shape[-1] == cfg.d_model
