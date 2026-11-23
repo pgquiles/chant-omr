@@ -489,6 +489,9 @@ class TestOVDecodeIntegration:
         cfg_path, ckpt_path = config_and_ckpt
         out_dir = tmp_path / "ov_greedy"
         _export_all_ov(ckpt_path, cfg_path, out_dir)
+        # Pin CPU: these tests verify decode logic, not device placement.
+        # AUTO assigns models to GPU/CPU nondeterministically per run, and
+        # the cached decoder fails under AUTO→GPU on this OpenVINO build.
 
         import numpy as np
 
@@ -498,7 +501,7 @@ class TestOVDecodeIntegration:
             ov_logits_func_cached,
         )
 
-        bundle = load_openvino_models(out_dir)
+        bundle = load_openvino_models(out_dir, device="CPU")
         dummy_pixels = np.random.randn(1, 3, 128, 1050).astype(np.float32)
         memory = ov_encoder_infer(bundle.encoder, dummy_pixels)
         memory_t = torch.from_numpy(memory)
@@ -516,6 +519,7 @@ class TestOVDecodeIntegration:
         cfg_path, ckpt_path = config_and_ckpt
         out_dir = tmp_path / "ov_beam"
         _export_all_ov(ckpt_path, cfg_path, out_dir)
+        # Pin CPU: see note in test_ov_cached_greedy_produces_tokens.
 
         import numpy as np
 
@@ -526,7 +530,7 @@ class TestOVDecodeIntegration:
             ov_encoder_infer,
         )
 
-        bundle = load_openvino_models(out_dir)
+        bundle = load_openvino_models(out_dir, device="CPU")
         dummy_pixels = np.random.randn(1, 3, 128, 1050).astype(np.float32)
         memory = ov_encoder_infer(bundle.encoder, dummy_pixels)
         memory_t = torch.from_numpy(memory)
@@ -546,6 +550,7 @@ class TestOVDecodeIntegration:
         cfg_path, ckpt_path = config_and_ckpt
         out_dir = tmp_path / "ov_decode_str"
         _export_all_ov(ckpt_path, cfg_path, out_dir)
+        # Pin CPU: see note in test_ov_cached_greedy_produces_tokens.
 
         import numpy as np
 
@@ -555,7 +560,7 @@ class TestOVDecodeIntegration:
             ov_logits_func_cached,
         )
 
-        bundle = load_openvino_models(out_dir)
+        bundle = load_openvino_models(out_dir, device="CPU")
         dummy_pixels = np.random.randn(1, 3, 128, 1050).astype(np.float32)
         memory = ov_encoder_infer(bundle.encoder, dummy_pixels)
         memory_t = torch.from_numpy(memory)

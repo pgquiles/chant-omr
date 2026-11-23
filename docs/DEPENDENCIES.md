@@ -82,6 +82,24 @@ or bundled OneAPI PyTorch conda envs for chant-omr.
 
 Runtime is installed via pip (`.[export]`). GPU inference still uses the RPMs above.
 
+## Troubleshooting
+
+### `ImportError: libsycl.so.9: undefined symbol: urKernelSetArgLocal`
+
+The pip XPU wheels bundle their own SYCL runtime. If your shell sources
+OneAPI `setvars.sh` (e.g. from `~/.bashrc`), its `LD_LIBRARY_PATH` entries
+make torch load the system `libur_loader` first, which may not match the
+bundled `libsycl`. Symptom: `import torch` fails even though
+`torch 2.x+xpu` is installed. Fix: drop the OneAPI paths for venv work —
+
+```bash
+env -u LD_LIBRARY_PATH .venv/bin/python -c "import torch"
+```
+
+Do **not** reinstall torch or the OneAPI RPMs for this error; the install
+is fine, only the loader path order is wrong. (`torch.xpu.is_available()`
+should still report `True` via the bundled runtime + `intel-compute-runtime`.)
+
 ## ghh consumer (#15)
 
 End-user OMR in ghh uses **OpenVINO only** (no PyTorch). See ghh `docs/DEPENDENCIES.md`
